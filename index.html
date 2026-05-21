@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Morpho Vault Simulator</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0a0b0f;
+    --surface: #14161d;
+    --surface-2: #1c1f28;
+    --border: #262936;
+    --border-strong: #353948;
+    --text: #f1f3f8;
+    --muted: #8b8e98;
+    --accent: #5b8def;
+    --accent-strong: #2470ff;
+    --green: #4ade80;
+    --amber: #fbbf24;
+    --red: #f87171;
+  }
+
+  html { color-scheme: dark; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", "Segoe UI", sans-serif;
+    background:
+      radial-gradient(1200px 600px at 80% -10%, rgba(91,141,239,0.10), transparent 60%),
+      radial-gradient(800px 500px at -10% 30%, rgba(74,222,128,0.05), transparent 60%),
+      var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+    padding: 32px 24px 64px;
+    min-height: 100vh;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .container { max-width: 1080px; margin: 0 auto; }
+
+  header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 28px;
+  }
+
+  .logo {
+    width: 36px; height: 36px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 16px; letter-spacing: -0.02em;
+    box-shadow: 0 6px 24px rgba(36,112,255,0.35);
+  }
+
+  h1 {
+    font-size: 20px; font-weight: 600; letter-spacing: -0.01em;
+  }
+
+  .subtitle {
+    color: var(--muted); font-size: 13px; margin-left: auto;
+  }
+
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 16px 18px;
+  }
+
+  .stat-label {
+    color: var(--muted); font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    margin-bottom: 6px;
+  }
+
+  .stat-value {
+    font-size: 22px; font-weight: 600; letter-spacing: -0.02em;
+  }
+
+  .stat-value.green { color: var(--green); }
+
+  .stat-sub {
+    color: var(--muted); font-size: 12px; margin-top: 4px;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+
+  .card-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 16px;
+  }
+
+  .card-title { font-size: 15px; font-weight: 600; }
+
+  .allocation-bar {
+    height: 28px;
+    border-radius: 8px;
+    overflow: hidden;
+    display: flex;
+    background: var(--surface-2);
+    margin-bottom: 14px;
+  }
+
+  .allocation-bar-segment {
+    transition: width 0.18s ease;
+    position: relative;
+  }
+
+  .allocation-legend {
+    display: flex; flex-wrap: wrap; gap: 14px;
+    font-size: 12px; color: var(--muted);
+  }
+
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+  .legend-item strong { color: var(--text); font-weight: 500; }
+
+  .legend-dot {
+    width: 10px; height: 10px; border-radius: 3px; display: inline-block;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+
+  th {
+    text-align: left;
+    color: var(--muted);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 500;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  td {
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: middle;
+  }
+
+  tbody tr:last-child td { border-bottom: none; }
+
+  .input-wrap {
+    display: flex;
+    align-items: center;
+    background: var(--surface-2);
+    border: 1px solid transparent;
+    border-radius: 8px;
+    padding: 6px 10px;
+    transition: border-color 0.15s, background 0.15s;
+  }
+
+  .input-wrap:hover { border-color: var(--border-strong); }
+  .input-wrap:focus-within {
+    border-color: var(--accent);
+    background: var(--surface);
+  }
+
+  .input-wrap.prefix::before {
+    content: "$";
+    color: var(--muted);
+    margin-right: 4px;
+    font-size: 13px;
+  }
+  .input-wrap.suffix::after {
+    content: "%";
+    color: var(--muted);
+    margin-left: 4px;
+    font-size: 13px;
+  }
+
+  input {
+    background: transparent;
+    border: none;
+    color: var(--text);
+    font: inherit;
+    font-size: 13px;
+    width: 100%;
+    outline: none;
+    padding: 2px 0;
+  }
+
+  input::placeholder { color: #5a5d68; }
+
+  input[type=number] { -moz-appearance: textfield; }
+  input[type=number]::-webkit-outer-spin-button,
+  input[type=number]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  .name-input { font-weight: 500; }
+
+  .pct-cell {
+    color: var(--muted);
+    font-size: 12px;
+    text-align: right;
+    padding-right: 14px;
+    white-space: nowrap;
+  }
+
+  .contrib-cell {
+    color: var(--green);
+    font-size: 13px;
+    font-weight: 500;
+    text-align: right;
+    padding-right: 14px;
+    white-space: nowrap;
+  }
+
+  .btn {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 14px;
+    border-radius: 8px;
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, transform 0.05s;
+  }
+
+  .btn:hover { background: var(--border); border-color: var(--border-strong); }
+  .btn:active { transform: translateY(1px); }
+
+  .btn-primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+    font-weight: 500;
+  }
+  .btn-primary:hover { background: var(--accent-strong); border-color: var(--accent-strong); }
+
+  .btn-icon {
+    background: transparent;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    padding: 6px 8px;
+    border-radius: 6px;
+    transition: all 0.15s;
+    font-size: 13px;
+  }
+
+  .btn-icon:hover {
+    color: var(--red);
+    background: var(--surface-2);
+  }
+
+  .market-color {
+    width: 10px; height: 10px;
+    border-radius: 3px;
+    display: inline-block;
+    margin-right: 10px;
+    flex-shrink: 0;
+  }
+
+  .settings-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+
+  .setting { display: flex; flex-direction: column; gap: 6px; }
+  .setting label { color: var(--muted); font-size: 12px; }
+
+  .hint {
+    color: var(--muted);
+    font-size: 12px;
+    margin-top: 6px;
+  }
+
+  .footer-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 8px;
+  }
+
+  .formula {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.7;
+  }
+  .formula code {
+    color: var(--text);
+    background: rgba(91,141,239,0.08);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-family: "SF Mono", "Menlo", monospace;
+    font-size: 11.5px;
+  }
+
+  @media (max-width: 800px) {
+    .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    .settings-row { grid-template-columns: 1fr; }
+    th:nth-child(4), td.pct-cell { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <div class="logo">M</div>
+    <h1>Morpho Vault Simulator</h1>
+    <span class="subtitle">Model curated vault yield from market allocations</span>
+  </header>
+
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-label">Total deposits</div>
+      <div class="stat-value" id="totalDeposits">$0</div>
+      <div class="stat-sub" id="deployedPct">0% deployed</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Gross APY</div>
+      <div class="stat-value" id="grossApy">0.00%</div>
+      <div class="stat-sub">Weighted avg, before fees</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Net APY</div>
+      <div class="stat-value green" id="netApy">0.00%</div>
+      <div class="stat-sub">To depositors, after fee</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Annual yield</div>
+      <div class="stat-value" id="annualYield">$0</div>
+      <div class="stat-sub" id="feeYield">Vault fee: $0</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">Allocation breakdown</div>
+      <div class="hint" id="allocSummary"></div>
+    </div>
+    <div class="allocation-bar" id="allocationBar"></div>
+    <div class="allocation-legend" id="allocationLegend"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">Markets</div>
+      <button class="btn btn-primary" id="addMarket">+ Add market</button>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 30%;">Market</th>
+          <th style="width: 22%;">Allocation</th>
+          <th style="width: 14%;">Supply APY</th>
+          <th style="width: 12%; text-align:right; padding-right:14px;">Share</th>
+          <th style="width: 16%; text-align:right; padding-right:14px;">Contribution</th>
+          <th style="width: 6%;"></th>
+        </tr>
+      </thead>
+      <tbody id="marketsBody"></tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">Vault settings</div>
+    </div>
+    <div class="settings-row">
+      <div class="setting">
+        <label>Performance fee</label>
+        <div class="input-wrap suffix">
+          <input type="number" id="performanceFee" value="10" min="0" max="50" step="0.5" />
+        </div>
+        <div class="hint">Morpho vaults charge up to 50% on yield generated.</div>
+      </div>
+      <div class="setting">
+        <label>Idle liquidity (earns 0% APY)</label>
+        <div class="input-wrap prefix">
+          <input type="number" id="idleLiquidity" value="0" min="0" step="1000000" />
+        </div>
+        <div class="hint">Undeployed deposits drag down the effective APY.</div>
+      </div>
+    </div>
+
+    <div class="footer-actions">
+      <button class="btn" id="loadSample">Load sample USDC vault</button>
+      <button class="btn" id="clearAll">Clear all</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">How the math works</div>
+    </div>
+    <div class="formula">
+      <div><code>Total = Σ allocations + idle</code></div>
+      <div><code>Gross APY = Σ (allocation × market APY) ÷ Total</code></div>
+      <div><code>Net APY  = Gross APY × (1 − performance fee)</code></div>
+      <div><code>Annual yield = Net APY × Total</code></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const COLORS = [
+    '#5b8def','#4ade80','#fbbf24','#f87171','#a78bfa',
+    '#22d3ee','#fb923c','#f472b6','#34d399','#facc15',
+    '#60a5fa','#c084fc'
+  ];
+  const IDLE_COLOR = '#2a2d39';
+
+  const SAMPLE = [
+    { name: 'wstETH / USDC', allocation: 45_000_000, apy: 8.4 },
+    { name: 'WBTC / USDC',   allocation: 30_000_000, apy: 6.8 },
+    { name: 'sDAI / USDC',   allocation: 15_000_000, apy: 5.2 },
+    { name: 'cbETH / USDC',  allocation: 10_000_000, apy: 7.5 },
+  ];
+
+  let markets = SAMPLE.map(m => ({ ...m }));
+
+  const $ = (id) => document.getElementById(id);
+  const body = $('marketsBody');
+
+  const fmtUSD = (n) => {
+    if (!isFinite(n)) return '$0';
+    const abs = Math.abs(n);
+    if (abs >= 1e9) return '$' + (n / 1e9).toFixed(2) + 'B';
+    if (abs >= 1e6) return '$' + (n / 1e6).toFixed(2) + 'M';
+    if (abs >= 1e3) return '$' + (n / 1e3).toFixed(1) + 'K';
+    return '$' + n.toFixed(0);
+  };
+
+  const escapeAttr = (s) =>
+    String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+  function renderRows() {
+    body.innerHTML = '';
+    markets.forEach((m, i) => {
+      const color = COLORS[i % COLORS.length];
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>
+          <div class="input-wrap">
+            <span class="market-color" style="background:${color}"></span>
+            <input class="name-input" type="text" value="${escapeAttr(m.name)}"
+                   data-i="${i}" data-k="name" placeholder="Market name" />
+          </div>
+        </td>
+        <td>
+          <div class="input-wrap prefix">
+            <input type="number" value="${m.allocation}" data-i="${i}" data-k="allocation"
+                   min="0" step="1000000" placeholder="0" />
+          </div>
+        </td>
+        <td>
+          <div class="input-wrap suffix">
+            <input type="number" value="${m.apy}" data-i="${i}" data-k="apy"
+                   step="0.1" placeholder="0.00" />
+          </div>
+        </td>
+        <td class="pct-cell" data-share="${i}">0%</td>
+        <td class="contrib-cell" data-contrib="${i}">+0.00%</td>
+        <td>
+          <button class="btn-icon" data-del="${i}" title="Remove market" aria-label="Remove">✕</button>
+        </td>
+      `;
+      body.appendChild(tr);
+    });
+    recalc();
+  }
+
+  function recalc() {
+    const idle = Math.max(0, parseFloat($('idleLiquidity').value) || 0);
+    const feePct = Math.max(0, Math.min(50, parseFloat($('performanceFee').value) || 0));
+    const fee = feePct / 100;
+
+    const deployed = markets.reduce((s, m) => s + (parseFloat(m.allocation) || 0), 0);
+    const total = deployed + idle;
+
+    let weightedReturn = 0;
+    markets.forEach((m) => {
+      const a = parseFloat(m.allocation) || 0;
+      const r = (parseFloat(m.apy) || 0) / 100;
+      weightedReturn += a * r;
+    });
+
+    const grossApy = total > 0 ? (weightedReturn / total) : 0;
+    const netApy = grossApy * (1 - fee);
+    const grossYield = grossApy * total;
+    const netYield = netApy * total;
+    const feeYield = grossYield - netYield;
+
+    $('totalDeposits').textContent = fmtUSD(total);
+    $('deployedPct').textContent = total > 0
+      ? `${(deployed / total * 100).toFixed(1)}% deployed · ${fmtUSD(idle)} idle`
+      : 'No deposits yet';
+    $('grossApy').textContent = (grossApy * 100).toFixed(2) + '%';
+    $('netApy').textContent = (netApy * 100).toFixed(2) + '%';
+    $('annualYield').textContent = fmtUSD(netYield);
+    $('feeYield').textContent = `Vault fee: ${fmtUSD(feeYield)}/yr`;
+
+    markets.forEach((m, i) => {
+      const a = parseFloat(m.allocation) || 0;
+      const r = (parseFloat(m.apy) || 0) / 100;
+      const share = total > 0 ? a / total : 0;
+      const contrib = share * r;
+      const shareEl = document.querySelector(`[data-share="${i}"]`);
+      const contribEl = document.querySelector(`[data-contrib="${i}"]`);
+      if (shareEl)   shareEl.textContent = (share * 100).toFixed(1) + '%';
+      if (contribEl) contribEl.textContent = '+' + (contrib * 100).toFixed(2) + '%';
+    });
+
+    const bar = $('allocationBar');
+    bar.innerHTML = '';
+    if (total > 0) {
+      markets.forEach((m, i) => {
+        const a = parseFloat(m.allocation) || 0;
+        if (a <= 0) return;
+        const seg = document.createElement('div');
+        seg.className = 'allocation-bar-segment';
+        seg.style.width = (a / total * 100) + '%';
+        seg.style.background = COLORS[i % COLORS.length];
+        seg.title = `${m.name || 'Unnamed'}: ${fmtUSD(a)} · ${(a/total*100).toFixed(1)}%`;
+        bar.appendChild(seg);
+      });
+      if (idle > 0) {
+        const seg = document.createElement('div');
+        seg.className = 'allocation-bar-segment';
+        seg.style.width = (idle / total * 100) + '%';
+        seg.style.background = IDLE_COLOR;
+        seg.title = `Idle: ${fmtUSD(idle)} · ${(idle/total*100).toFixed(1)}%`;
+        bar.appendChild(seg);
+      }
+    }
+
+    const legend = $('allocationLegend');
+    legend.innerHTML = '';
+    markets.forEach((m, i) => {
+      const a = parseFloat(m.allocation) || 0;
+      const share = total > 0 ? (a / total * 100).toFixed(1) : '0.0';
+      const div = document.createElement('div');
+      div.className = 'legend-item';
+      div.innerHTML = `
+        <span class="legend-dot" style="background:${COLORS[i % COLORS.length]}"></span>
+        <strong>${escapeAttr(m.name || 'Unnamed')}</strong>
+        <span>· ${share}%</span>`;
+      legend.appendChild(div);
+    });
+    if (idle > 0 && total > 0) {
+      const share = (idle / total * 100).toFixed(1);
+      const div = document.createElement('div');
+      div.className = 'legend-item';
+      div.innerHTML = `
+        <span class="legend-dot" style="background:${IDLE_COLOR}"></span>
+        <strong>Idle</strong>
+        <span>· ${share}%</span>`;
+      legend.appendChild(div);
+    }
+
+    $('allocSummary').textContent = markets.length
+      ? `${markets.length} market${markets.length === 1 ? '' : 's'} · ${fmtUSD(deployed)} deployed`
+      : '';
+  }
+
+  body.addEventListener('input', (e) => {
+    const inp = e.target;
+    if (inp.dataset && inp.dataset.i !== undefined) {
+      const i = +inp.dataset.i;
+      const k = inp.dataset.k;
+      if (k === 'name') markets[i][k] = inp.value;
+      else markets[i][k] = parseFloat(inp.value) || 0;
+      recalc();
+    }
+  });
+
+  body.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-del]');
+    if (btn) {
+      const i = +btn.dataset.del;
+      markets.splice(i, 1);
+      renderRows();
+    }
+  });
+
+  $('addMarket').addEventListener('click', () => {
+    markets.push({ name: 'New market', allocation: 0, apy: 0 });
+    renderRows();
+    const inputs = body.querySelectorAll('input[data-k="name"]');
+    const last = inputs[inputs.length - 1];
+    if (last) { last.focus(); last.select(); }
+  });
+
+  $('performanceFee').addEventListener('input', recalc);
+  $('idleLiquidity').addEventListener('input', recalc);
+
+  $('loadSample').addEventListener('click', () => {
+    markets = SAMPLE.map(m => ({ ...m }));
+    $('performanceFee').value = 10;
+    $('idleLiquidity').value = 0;
+    renderRows();
+  });
+
+  $('clearAll').addEventListener('click', () => {
+    markets = [];
+    $('idleLiquidity').value = 0;
+    renderRows();
+  });
+
+  renderRows();
+</script>
+</body>
+</html>
