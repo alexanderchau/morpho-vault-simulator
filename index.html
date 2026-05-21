@@ -88,10 +88,13 @@
   }
 
   .stat-value.green { color: var(--green); }
+  .stat-value.amber { color: var(--amber); }
 
   .stat-sub {
     color: var(--muted); font-size: 12px; margin-top: 4px;
   }
+
+  .stat-sub.amber { color: var(--amber); }
 
   .card {
     background: var(--surface);
@@ -104,6 +107,7 @@
   .card-header {
     display: flex; align-items: center; justify-content: space-between;
     margin-bottom: 16px;
+    gap: 12px;
   }
 
   .card-title { font-size: 15px; font-weight: 600; }
@@ -115,11 +119,11 @@
     display: flex;
     background: var(--surface-2);
     margin-bottom: 14px;
+    position: relative;
   }
 
   .allocation-bar-segment {
     transition: width 0.18s ease;
-    position: relative;
   }
 
   .allocation-legend {
@@ -210,7 +214,7 @@
 
   .name-input { font-weight: 500; }
 
-  .pct-cell {
+  .usd-cell {
     color: var(--muted);
     font-size: 12px;
     text-align: right;
@@ -289,11 +293,25 @@
     margin-top: 6px;
   }
 
+  .warn-banner {
+    display: none;
+    background: rgba(251, 191, 36, 0.08);
+    border: 1px solid rgba(251, 191, 36, 0.35);
+    color: var(--amber);
+    padding: 10px 14px;
+    border-radius: 10px;
+    font-size: 13px;
+    margin-top: 14px;
+  }
+  .warn-banner.show { display: block; }
+
   .footer-actions {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-top: 8px;
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
   }
 
   .formula {
@@ -303,7 +321,7 @@
     padding: 12px 14px;
     font-size: 12px;
     color: var(--muted);
-    line-height: 1.7;
+    line-height: 1.8;
   }
   .formula code {
     color: var(--text);
@@ -317,7 +335,7 @@
   @media (max-width: 800px) {
     .stats-grid { grid-template-columns: repeat(2, 1fr); }
     .settings-row { grid-template-columns: 1fr; }
-    th:nth-child(4), td.pct-cell { display: none; }
+    th:nth-child(3), td.usd-cell { display: none; }
   }
 </style>
 </head>
@@ -333,7 +351,7 @@
     <div class="stat-card">
       <div class="stat-label">Total deposits</div>
       <div class="stat-value" id="totalDeposits">$0</div>
-      <div class="stat-sub" id="deployedPct">0% deployed</div>
+      <div class="stat-sub" id="allocStatus">0% allocated</div>
     </div>
     <div class="stat-card">
       <div class="stat-label">Gross APY</div>
@@ -369,16 +387,17 @@
     <table>
       <thead>
         <tr>
-          <th style="width: 30%;">Market</th>
-          <th style="width: 22%;">Allocation</th>
+          <th style="width: 32%;">Market</th>
+          <th style="width: 18%;">Allocation</th>
+          <th style="width: 14%; text-align:right; padding-right:14px;">= USD</th>
           <th style="width: 14%;">Supply APY</th>
-          <th style="width: 12%; text-align:right; padding-right:14px;">Share</th>
           <th style="width: 16%; text-align:right; padding-right:14px;">Contribution</th>
           <th style="width: 6%;"></th>
         </tr>
       </thead>
       <tbody id="marketsBody"></tbody>
     </table>
+    <div class="warn-banner" id="overAllocWarn"></div>
   </div>
 
   <div class="card">
@@ -387,18 +406,18 @@
     </div>
     <div class="settings-row">
       <div class="setting">
+        <label>Total vault size</label>
+        <div class="input-wrap prefix">
+          <input type="number" id="vaultSize" value="100000000" min="0" step="1000000" />
+        </div>
+        <div class="hint">Total deposits the allocation percentages apply to.</div>
+      </div>
+      <div class="setting">
         <label>Performance fee</label>
         <div class="input-wrap suffix">
           <input type="number" id="performanceFee" value="10" min="0" max="50" step="0.5" />
         </div>
         <div class="hint">Morpho vaults charge up to 50% on yield generated.</div>
-      </div>
-      <div class="setting">
-        <label>Idle liquidity (earns 0% APY)</label>
-        <div class="input-wrap prefix">
-          <input type="number" id="idleLiquidity" value="0" min="0" step="1000000" />
-        </div>
-        <div class="hint">Undeployed deposits drag down the effective APY.</div>
       </div>
     </div>
 
@@ -413,10 +432,10 @@
       <div class="card-title">How the math works</div>
     </div>
     <div class="formula">
-      <div><code>Total = Σ allocations + idle</code></div>
-      <div><code>Gross APY = Σ (allocation × market APY) ÷ Total</code></div>
+      <div><code>Idle % = max(0, 100% − Σ allocations)</code></div>
+      <div><code>Gross APY = Σ (allocation % × market APY)</code> &nbsp;<span style="color:var(--muted)">— idle counts as 0%, dragging APY down</span></div>
       <div><code>Net APY  = Gross APY × (1 − performance fee)</code></div>
-      <div><code>Annual yield = Net APY × Total</code></div>
+      <div><code>Annual yield = Net APY × total vault size</code></div>
     </div>
   </div>
 </div>
@@ -429,11 +448,12 @@
   ];
   const IDLE_COLOR = '#2a2d39';
 
+  // Sample USDC vault: 92% allocated, 8% idle.
   const SAMPLE = [
-    { name: 'wstETH / USDC', allocation: 45_000_000, apy: 8.4 },
-    { name: 'WBTC / USDC',   allocation: 30_000_000, apy: 6.8 },
-    { name: 'sDAI / USDC',   allocation: 15_000_000, apy: 5.2 },
-    { name: 'cbETH / USDC',  allocation: 10_000_000, apy: 7.5 },
+    { name: 'wstETH / USDC', allocation: 40, apy: 8.4 },
+    { name: 'WBTC / USDC',   allocation: 28, apy: 6.8 },
+    { name: 'sDAI / USDC',   allocation: 14, apy: 5.2 },
+    { name: 'cbETH / USDC',  allocation: 10, apy: 7.5 },
   ];
 
   let markets = SAMPLE.map(m => ({ ...m }));
@@ -467,18 +487,18 @@
           </div>
         </td>
         <td>
-          <div class="input-wrap prefix">
+          <div class="input-wrap suffix">
             <input type="number" value="${m.allocation}" data-i="${i}" data-k="allocation"
-                   min="0" step="1000000" placeholder="0" />
+                   min="0" step="0.5" placeholder="0" />
           </div>
         </td>
+        <td class="usd-cell" data-usd="${i}">$0</td>
         <td>
           <div class="input-wrap suffix">
             <input type="number" value="${m.apy}" data-i="${i}" data-k="apy"
                    step="0.1" placeholder="0.00" />
           </div>
         </td>
-        <td class="pct-cell" data-share="${i}">0%</td>
         <td class="contrib-cell" data-contrib="${i}">+0.00%</td>
         <td>
           <button class="btn-icon" data-del="${i}" title="Remove market" aria-label="Remove">✕</button>
@@ -490,95 +510,111 @@
   }
 
   function recalc() {
-    const idle = Math.max(0, parseFloat($('idleLiquidity').value) || 0);
+    const vaultSize = Math.max(0, parseFloat($('vaultSize').value) || 0);
     const feePct = Math.max(0, Math.min(50, parseFloat($('performanceFee').value) || 0));
     const fee = feePct / 100;
 
-    const deployed = markets.reduce((s, m) => s + (parseFloat(m.allocation) || 0), 0);
-    const total = deployed + idle;
+    // Allocation values are percentages (e.g., 40 means 40%).
+    const allocSumPct = markets.reduce((s, m) => s + (parseFloat(m.allocation) || 0), 0);
+    const idlePct = Math.max(0, 100 - allocSumPct);
+    const overAllocated = allocSumPct > 100;
 
-    let weightedReturn = 0;
+    // Gross APY = Σ (alloc% × marketAPY%) — both as fractions.
+    let grossApyPct = 0;
     markets.forEach((m) => {
-      const a = parseFloat(m.allocation) || 0;
-      const r = (parseFloat(m.apy) || 0) / 100;
-      weightedReturn += a * r;
+      grossApyPct += ((parseFloat(m.allocation) || 0) / 100) * (parseFloat(m.apy) || 0);
     });
 
-    const grossApy = total > 0 ? (weightedReturn / total) : 0;
+    const grossApy = grossApyPct / 100;
     const netApy = grossApy * (1 - fee);
-    const grossYield = grossApy * total;
-    const netYield = netApy * total;
+    const grossYield = grossApy * vaultSize;
+    const netYield = netApy * vaultSize;
     const feeYield = grossYield - netYield;
 
-    $('totalDeposits').textContent = fmtUSD(total);
-    $('deployedPct').textContent = total > 0
-      ? `${(deployed / total * 100).toFixed(1)}% deployed · ${fmtUSD(idle)} idle`
-      : 'No deposits yet';
-    $('grossApy').textContent = (grossApy * 100).toFixed(2) + '%';
-    $('netApy').textContent = (netApy * 100).toFixed(2) + '%';
+    // Top stats
+    $('totalDeposits').textContent = fmtUSD(vaultSize);
+    if (overAllocated) {
+      $('allocStatus').textContent = `${allocSumPct.toFixed(1)}% allocated · over by ${(allocSumPct - 100).toFixed(1)}%`;
+      $('allocStatus').classList.add('amber');
+    } else {
+      $('allocStatus').textContent = `${allocSumPct.toFixed(1)}% allocated · ${idlePct.toFixed(1)}% idle`;
+      $('allocStatus').classList.remove('amber');
+    }
+    $('grossApy').textContent = grossApyPct.toFixed(2) + '%';
+    $('netApy').textContent = (grossApyPct * (1 - fee)).toFixed(2) + '%';
     $('annualYield').textContent = fmtUSD(netYield);
     $('feeYield').textContent = `Vault fee: ${fmtUSD(feeYield)}/yr`;
 
+    // Per-row USD and contribution
     markets.forEach((m, i) => {
-      const a = parseFloat(m.allocation) || 0;
-      const r = (parseFloat(m.apy) || 0) / 100;
-      const share = total > 0 ? a / total : 0;
-      const contrib = share * r;
-      const shareEl = document.querySelector(`[data-share="${i}"]`);
+      const alloc = parseFloat(m.allocation) || 0;
+      const apy = parseFloat(m.apy) || 0;
+      const usd = (alloc / 100) * vaultSize;
+      const contribPct = (alloc / 100) * apy;
+      const usdEl = document.querySelector(`[data-usd="${i}"]`);
       const contribEl = document.querySelector(`[data-contrib="${i}"]`);
-      if (shareEl)   shareEl.textContent = (share * 100).toFixed(1) + '%';
-      if (contribEl) contribEl.textContent = '+' + (contrib * 100).toFixed(2) + '%';
+      if (usdEl)     usdEl.textContent = fmtUSD(usd);
+      if (contribEl) contribEl.textContent = '+' + contribPct.toFixed(2) + '%';
     });
 
-    const bar = $('allocationBar');
-    bar.innerHTML = '';
-    if (total > 0) {
-      markets.forEach((m, i) => {
-        const a = parseFloat(m.allocation) || 0;
-        if (a <= 0) return;
-        const seg = document.createElement('div');
-        seg.className = 'allocation-bar-segment';
-        seg.style.width = (a / total * 100) + '%';
-        seg.style.background = COLORS[i % COLORS.length];
-        seg.title = `${m.name || 'Unnamed'}: ${fmtUSD(a)} · ${(a/total*100).toFixed(1)}%`;
-        bar.appendChild(seg);
-      });
-      if (idle > 0) {
-        const seg = document.createElement('div');
-        seg.className = 'allocation-bar-segment';
-        seg.style.width = (idle / total * 100) + '%';
-        seg.style.background = IDLE_COLOR;
-        seg.title = `Idle: ${fmtUSD(idle)} · ${(idle/total*100).toFixed(1)}%`;
-        bar.appendChild(seg);
-      }
+    // Over-allocation banner
+    const warn = $('overAllocWarn');
+    if (overAllocated) {
+      warn.textContent = `Total allocations sum to ${allocSumPct.toFixed(1)}% — over 100% means this vault can't actually deploy this configuration. Reduce some allocations.`;
+      warn.classList.add('show');
+    } else {
+      warn.classList.remove('show');
     }
 
+    // Allocation bar (segments scaled to 100% of bar width when within budget;
+    // when over, segments are normalized proportionally so the bar fills exactly).
+    const bar = $('allocationBar');
+    bar.innerHTML = '';
+    const denom = overAllocated ? allocSumPct : 100;
+    markets.forEach((m, i) => {
+      const alloc = parseFloat(m.allocation) || 0;
+      if (alloc <= 0) return;
+      const seg = document.createElement('div');
+      seg.className = 'allocation-bar-segment';
+      seg.style.width = (alloc / denom * 100) + '%';
+      seg.style.background = COLORS[i % COLORS.length];
+      seg.title = `${m.name || 'Unnamed'}: ${alloc.toFixed(1)}% · ${fmtUSD((alloc/100) * vaultSize)}`;
+      bar.appendChild(seg);
+    });
+    if (!overAllocated && idlePct > 0) {
+      const seg = document.createElement('div');
+      seg.className = 'allocation-bar-segment';
+      seg.style.width = idlePct + '%';
+      seg.style.background = IDLE_COLOR;
+      seg.title = `Idle: ${idlePct.toFixed(1)}% · ${fmtUSD((idlePct/100) * vaultSize)}`;
+      bar.appendChild(seg);
+    }
+
+    // Legend
     const legend = $('allocationLegend');
     legend.innerHTML = '';
     markets.forEach((m, i) => {
-      const a = parseFloat(m.allocation) || 0;
-      const share = total > 0 ? (a / total * 100).toFixed(1) : '0.0';
+      const alloc = parseFloat(m.allocation) || 0;
       const div = document.createElement('div');
       div.className = 'legend-item';
       div.innerHTML = `
         <span class="legend-dot" style="background:${COLORS[i % COLORS.length]}"></span>
         <strong>${escapeAttr(m.name || 'Unnamed')}</strong>
-        <span>· ${share}%</span>`;
+        <span>· ${alloc.toFixed(1)}%</span>`;
       legend.appendChild(div);
     });
-    if (idle > 0 && total > 0) {
-      const share = (idle / total * 100).toFixed(1);
+    if (!overAllocated && idlePct > 0) {
       const div = document.createElement('div');
       div.className = 'legend-item';
       div.innerHTML = `
         <span class="legend-dot" style="background:${IDLE_COLOR}"></span>
         <strong>Idle</strong>
-        <span>· ${share}%</span>`;
+        <span>· ${idlePct.toFixed(1)}%</span>`;
       legend.appendChild(div);
     }
 
     $('allocSummary').textContent = markets.length
-      ? `${markets.length} market${markets.length === 1 ? '' : 's'} · ${fmtUSD(deployed)} deployed`
+      ? `${markets.length} market${markets.length === 1 ? '' : 's'} · ${allocSumPct.toFixed(1)}% allocated`
       : '';
   }
 
@@ -611,18 +647,17 @@
   });
 
   $('performanceFee').addEventListener('input', recalc);
-  $('idleLiquidity').addEventListener('input', recalc);
+  $('vaultSize').addEventListener('input', recalc);
 
   $('loadSample').addEventListener('click', () => {
     markets = SAMPLE.map(m => ({ ...m }));
     $('performanceFee').value = 10;
-    $('idleLiquidity').value = 0;
+    $('vaultSize').value = 100000000;
     renderRows();
   });
 
   $('clearAll').addEventListener('click', () => {
     markets = [];
-    $('idleLiquidity').value = 0;
     renderRows();
   });
 
