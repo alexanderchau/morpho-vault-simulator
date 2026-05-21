@@ -305,15 +305,6 @@
   }
   .warn-banner.show { display: block; }
 
-  .footer-actions {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-top: 16px;
-    padding-top: 16px;
-    border-top: 1px solid var(--border);
-  }
-
   .formula {
     background: var(--surface-2);
     border: 1px solid var(--border);
@@ -419,11 +410,6 @@
         </div>
         <div class="hint">Morpho vaults charge up to 50% on yield generated.</div>
       </div>
-    </div>
-
-    <div class="footer-actions">
-      <button class="btn" id="loadSample">Load sample USDC vault</button>
-      <button class="btn" id="clearAll">Clear all</button>
     </div>
   </div>
 
@@ -648,18 +634,6 @@
 
   $('performanceFee').addEventListener('input', recalc);
   $('vaultSize').addEventListener('input', recalc);
-
-  $('loadSample').addEventListener('click', () => {
-    markets = SAMPLE.map(m => ({ ...m }));
-    $('performanceFee').value = 10;
-    $('vaultSize').value = 100000000;
-    renderRows();
-  });
-
-  $('clearAll').addEventListener('click', () => {
-    markets = [];
-    renderRows();
-  });
 
   renderRows();
 </script>
